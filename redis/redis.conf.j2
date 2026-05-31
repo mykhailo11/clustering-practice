@@ -1,0 +1,31 @@
+port {{ item }}
+bind 0.0.0.0
+daemonize yes
+protected-mode no
+# Cluster
+cluster-enabled yes
+cluster-config-file nodes.conf
+cluster-node-timeout 25000
+cluster-announce-port {{ item }}
+cluster-announce-ip {{ inventory_hostname }}
+cluster-announce-bus-port 1{{ item }}
+# Snapshots
+save 500 1
+save 200 10
+save 60 10000
+rdbcompression yes
+rdbchecksum yes
+dbfilename dump.rdb
+# Persistence
+appendonly yes
+appendfilename "appendonly.aof"
+appendfsync everysec
+aof-use-rdb-preamble yes
+# Memory
+maxmemory 64mb
+maxmemory-policy allkeys-lru
+maxmemory-samples 5
+# General
+dir /var/lib/redis/{{ item }}
+pidfile /var/run/redis_{{ item }}.pid
+logfile /var/log/redis_{{ item }}.log

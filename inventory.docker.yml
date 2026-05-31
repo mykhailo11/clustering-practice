@@ -1,0 +1,13 @@
+plugin: community.docker.docker_containers
+docker_host: tcp://localhost:2375
+
+filters:
+  - include: >-
+      inventory_hostname.startswith('clustering-practice-')
+  - exclude: true
+
+groups:
+  cluster_nodes: "docker_name.startswith('clustering-practice-')"
+
+vars:
+  ansible_python_interpreter: /usr/bin/python3.11

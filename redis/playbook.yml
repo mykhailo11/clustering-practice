@@ -1,0 +1,83 @@
+- name: Provision Redis instances
+  hosts: cluster_nodes
+  gather_facts: false
+  tasks:
+    - name: Bootstrap Python 3 on containers
+      ansible.builtin.raw: apk add --no-cache python3
+      changed_when: true
+  
+    - name: Ensure necessary Redis operational directories exist
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - /etc/redis
+        - /var/log/redis
+
+    - name: Create data storage subdirectories for each instance port
+      ansible.builtin.file:
+        path: "/var/lib/redis/{{ item }}"
+        state: directory
+        mode: '0755'
+      loop: "{{ ports }}"
+
+    - name: Dynamically generate configuration files from template
+      ansible.builtin.template:
+        src: redis.conf.j2
+        dest: "/etc/redis/redis_{{ item }}.conf"
+        mode: '0644'
+      loop: "{{ ports }}"
+
+    - name: Ensure Redis and dependencies are installed
+      community.general.apk:
+        name: [redis, bash, iproute2]
+        state: present
+        update_cache: yes
+
+    - name: Ensure Redis ports are up and running as daemons
+      ansible.builtin.shell: "redis-server /etc/redis/redis_{{ item }}.conf"
+      loop: "{{ ports }}"
+      args:
+        creates: "/var/run/redis_{{ item }}.pid"
+
+    - name: Verify instances are bound and running cleanly
+      ansible.builtin.shell: "redis-cli -p {{ item }} ping"
+      loop: "{{ ports }}"
+      register: ping_check
+      changed_when: false
+
+    - name: Show engine verification health
+      ansible.builtin.debug:
+        msg: "Port {{ item.item }} responded with: {{ item.stdout }}"
+      loop: "{{ ping_check.results }}"
+
+- name: Configure cluster
+  hosts: cluster_nodes
+  gather_facts: false
+  tasks:
+    - name: Configure cluster using CLI
+      ansible.builtin.shell: redis-cli --cluster create {{ instances | map('join', ':') | join(' ') }} --cluster-replicas {{ replicas }} --cluster-yes
+      vars:
+        instances: "{{ ports | product(groups['cluster_nodes']) | map('reverse') }}"
+      run_once: true
+
+
+# - name: Configure Replication Layout
+#   hosts: cluster_nodes
+#   gather_facts: false
+#   tasks:
+#     - name: Meet all masters
+#       ansible.builtin.shell: redis-cli -p 3010 CLUSTER MEET {{ item }} 3010
+#       loop: "{{ groups['cluster_nodes'] | reject('equalto', inventory_hostname) | list }}"
+
+#     - name: Pair replica instances to their designated masters
+#       ansible.builtin.shell: |
+#         redis-cli -p {{ redis_port }} REPLICAOF {{ next }} 3010
+#       loop: "{{ replicas }}"
+#       vars:
+#         redis_port: "301{{ item }}"
+#         current: "{{ groups['cluster_nodes'].index(inventory_hostname) }}"
+#         total: "{{ groups['cluster_nodes'] | length  }}"
+#         next: "{{ groups['cluster_nodes'][(current + 1) % total] }}"
+#         previous: "{{ groups['cluster_nodes'][(current - 1) % total] }}"

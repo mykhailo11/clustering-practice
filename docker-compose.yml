@@ -1,0 +1,34 @@
+version: '3.8'
+
+x-container-template: &container-template
+  image: alpine:${CONTAINER_IMAGE_VERSION}
+  restart: always
+  command: tail -f /dev/null
+
+x-container-resources: &container-resources
+  resources:
+    limits:
+      cpus: '${CPU_AMOUNT}'
+      memory: ${MAX_MEMORY}
+
+services:
+  node:
+    <<: *container-template
+    networks: 
+      - default
+    deploy:
+      <<: *container-resources
+      replicas: ${NODES}
+  
+  redis-insight:
+    image: redislabs/redisinsight
+    container_name: redis-insight
+    ports:
+      - "5540:5540"
+    networks:
+      - default
+    depends_on:
+      - node
+
+networks:
+  default:
