@@ -46,13 +46,13 @@ docker exec -it <alive-node> bin/sh
 tail -f /var/log/redis_3010.log
 ```
 
+## Redis clusterization
+
 You can test sharding process using Redis Insight
 
 Cluster has the following architecture
  
 ![Architecture](/images/architecture.png)
-
-## Redis clusterization
 
 Native redis instrumentation can be leveraged in order to implement high availability and fault tolerance for caching
 
@@ -92,3 +92,10 @@ cluster-node-timeout <timeframe>
 ```
 
 If node is unreachable within the specified timeframe it is considered dead. It is recomended to use 15 seconds in production
+
+## NATS clusterization
+
+NATS using raft for clusterization, not sharding. There is only one leader node per cluster. In order to avoid brain-split problem the number of active nodes needs to match the quorum. Sharding is achieved on
+a runtime level by using `subject` and `tags` fields (for JetStream).
+
+You can use NUI as a sandbox environment

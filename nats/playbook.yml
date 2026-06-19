@@ -1,0 +1,114 @@
+---
+- name: Provision NATS Cluster
+  hosts: cluster_nodes
+  gather_facts: false
+
+  tasks:
+    - name: Bootstrap Python 3 on containers
+      ansible.builtin.raw: apk add --no-cache python3
+      changed_when: true
+
+    - name: Ensure dependencies are installed
+      community.general.apk:
+        name: [tar, xz, unzip]
+        state: present
+        update_cache: yes
+
+    - name: Create NATS group
+      ansible.builtin.group:
+        name: nats
+        state: present
+
+    - name: Create NATS user
+      ansible.builtin.user:
+        name: nats
+        group: nats
+        shell: /usr/sbin/nologin
+        create_home: false
+
+    - name: Create configuration and storage directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: nats
+        group: nats
+        mode: '0755'
+      loop:
+        - /etc/nats
+        - /var/lib/nats
+        - /var/lib/nats/jetstream
+
+    - name: Download NATS binary archive
+      ansible.builtin.get_url:
+        url: "https://github.com/nats-io/nats-server/releases/download/v{{ nats_version }}/nats-server-v{{ nats_version }}-linux-{{ nats_arch }}.tar.gz"
+        dest: "/tmp/nats-server.tar.gz"
+        mode: '0644'
+
+    - name: Unarchive NATS binary
+      ansible.builtin.unarchive:
+        src: "/tmp/nats-server.tar.gz"
+        dest: "/tmp"
+        remote_src: true
+
+    - name: Copy NATS binary to /usr/local/bin
+      ansible.builtin.copy:
+        src: "/tmp/nats-server-v{{ nats_version }}-linux-{{ nats_arch }}/nats-server"
+        dest: "/usr/local/bin/nats-server"
+        mode: '0755'
+        remote_src: true
+      # notify: Restart NATS
+
+    - name: Deploy NATS configuration
+      ansible.builtin.template:
+        src: nats-server.conf.j2
+        dest: /etc/nats/nats-server.conf
+        owner: nats
+        group: nats
+        mode: '0644'
+      # notify: Restart NATS
+      vars:
+        routes: "{{ groups['cluster_nodes'] | reject('sameas', inventory_hostname) }}"
+
+    # - name: Create systemd service unit file from template
+    #   ansible.builtin.template:
+    #     src: nats.init.j2
+    #     dest: /etc/init.d/nats
+    #     owner: nats
+    #     group: nats
+    #     mode: '0755'
+    #   notify: Restart NATS
+
+    # - name: Ensure NATS service is started and enabled
+    #   ansible.builtin.service:
+    #     name: nats
+    #     enabled: yes
+    #     state: started
+
+    - name: Ensure NATS is running directly in the background
+      ansible.builtin.shell: "nats-server -c /etc/nats/nats-server.conf -P /var/run/nats.pid >> /var/log/nats.log 2>&1 &"
+      args:
+        creates: /var/run/nats.pid
+
+    - name: Wait for NATS client port to be active
+      ansible.builtin.wait_for:
+        port: 4000
+        timeout: 10
+
+    - name: Check NATS Cluster Routes API
+      ansible.builtin.uri:
+        url: http://localhost:8222/routez
+        return_content: yes
+      register: nats_monitor
+
+    - name: Fail if cluster nodes are missing
+      ansible.builtin.assert:
+        that:
+          - nats_monitor.json.num_routes >= 1
+        fail_msg: "Cluster verification failed! Node has 0 active routes to other nodes."
+        success_msg: "Cluster verified! Node is successfully connected to peers."
+
+  handlers:
+    - name: Restart NATS
+      ansible.builtin.service:
+        name: nats
+        state: restarted

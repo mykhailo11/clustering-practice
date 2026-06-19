@@ -1,0 +1,12 @@
+#!/sbin/openrc-run
+
+description="NATS Server"
+pidfile="/run/${RC_SVCNAME}.pid"
+command="{{ nats_bin_path | default('/usr/local/bin/nats-server') }}"
+command_args="-c {{ nats_config_path | default('/etc/nats/nats-server.conf') }}"
+command_background="yes"
+
+depend() {
+    need net
+    after firewall
+}

@@ -1,0 +1,18 @@
+server_name: "{{ inventory_hostname }}"
+port: 4000
+http_port: 8222
+
+cluster {
+  name: "default-cluster"
+  listen: 0.0.0.0:6222
+  
+  routes = [
+    {% for host in routes %}
+    "nats://{{ host }}:6222"
+    {% endfor %}
+  ]
+}
+
+jetstream {
+  store_dir: "/var/lib/nats/jetstream"
+}

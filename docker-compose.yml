@@ -1,5 +1,3 @@
-version: '3.8'
-
 x-container-template: &container-template
   image: alpine:${CONTAINER_IMAGE_VERSION}
   restart: always
@@ -25,6 +23,15 @@ services:
     container_name: redis-insight
     ports:
       - "5540:5540"
+    networks:
+      - default
+    depends_on:
+      - node
+  
+  nats-ui:
+    image: ghcr.io/nats-nui/nui:latest
+    ports:
+      - "31311:31311"
     networks:
       - default
     depends_on:

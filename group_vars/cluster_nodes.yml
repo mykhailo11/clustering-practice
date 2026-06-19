@@ -1,2 +1,7 @@
 replicas: "{{ lookup('ansible.builtin.ini', 'REPLICAS', type='properties', file='../.env') | int }}"
+
 ports: "{{ range(3010, 3010 + replicas + 1) | list }}"
+
+nats_version: "2.10.12"  
+nats_arch: "arm64"
+
